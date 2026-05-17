@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.next/
+
+# Environment
+.env
+.env.local
+.env.production.local
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build output
+web/.next/
+web/node_modules/
+
+# Editor
+.vscode/
+.idea/
+
+# PEM files
+*.pem
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Stitch design files (large, not needed for deploy)
+stitch_halalvest_stock_screener/
+
+# Temp files
+*.tmp
+*.swp

@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════
+   HalalVest Design System — "Ethical Prosperity"
+   Based on Stitch AI DESIGN.md
+   ═══════════════════════════════════════════════════════════ */
+
+@theme inline {
+  /* ── Core Colors ──────────────────────────────────────── */
+  --color-surface: #16130e;
+  --color-surface-dim: #16130e;
+  --color-surface-bright: #3d3833;
+  --color-surface-container-lowest: #110e09;
+  --color-surface-container-low: #1f1b16;
+  --color-surface-container: #231f1a;
+  --color-surface-container-high: #2d2924;
+  --color-surface-container-highest: #38342f;
+
+  --color-on-surface: #eae1d9;
+  --color-on-surface-variant: #d2c4b5;
+
+  --color-background: #0a0f1a;
+  --color-on-background: #eae1d9;
+
+  --color-primary: #ecbf7d;
+  --color-on-primary: #432c00;
+  --color-primary-container: #c49b5c;
+
+  --color-secondary: #89ceff;
+  --color-on-secondary: #00344d;
+
+  --color-tertiary: #aac9f3;
+  --color-error: #ffb4ab;
+
+  --color-outline: #9b8f80;
+  --color-outline-variant: #4e4539;
+
+  /* ── Semantic Market Colors ───────────────────────────── */
+  --color-gain: #22c55e;
+  --color-loss: #ef4444;
+
+  /* ── Table Row Colors ─────────────────────────────────── */
+  --color-row-even: #111827;
+  --color-row-odd: #0d1321;
+  --color-row-hover: #1a2332;
+
+  /* ── Spacing ──────────────────────────────────────────── */
+  --spacing-gutter: 24px;
+  --spacing-margin-desktop: 64px;
+  --spacing-margin-mobile: 20px;
+  --spacing-container-max: 1280px;
+
+  /* ── Typography ───────────────────────────────────────── */
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* ── Base Styles ──────────────────────────────────────────── */
+body {
+  background-color: var(--color-background);
+  color: var(--color-on-surface);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Islamic Pattern Background ──────────────────────────── */
+.islamic-pattern {
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0l2.5 7.5L40 10l-7.5 2.5L30 20l-2.5-7.5L20 10l7.5-2.5L30 0zM0 30l2.5 7.5L10 40l-7.5 2.5L0 50l-2.5-7.5L-10 40l7.5-2.5L0 30zM60 30l2.5 7.5L70 40l-7.5 2.5L60 50l-2.5-7.5L50 40l7.5-2.5L60 30zM30 60l2.5 7.5L40 70l-7.5 2.5L30 80l-2.5-7.5L20 70l7.5-2.5L30 60z' fill='%23ecbf7d' fill-opacity='0.04' fill-rule='evenodd'/%3E%3C/svg%3E");
+}
+
+/* ── Glass Card ──────────────────────────────────────────── */
+.glass-card {
+  background: rgba(17, 24, 39, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ── Custom Scrollbar ────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-surface-container-lowest);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-outline-variant);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-outline);
+}
+
+/* ── Animations ──────────────────────────────────────────── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s ease-out forwards;
+}
+
+.animate-fade-in-up-delay-1 {
+  animation: fadeInUp 0.6s ease-out 0.1s forwards;
+  opacity: 0;
+}
+
+.animate-fade-in-up-delay-2 {
+  animation: fadeInUp 0.6s ease-out 0.2s forwards;
+  opacity: 0;
+}
+
+.animate-fade-in-up-delay-3 {
+  animation: fadeInUp 0.6s ease-out 0.3s forwards;
+  opacity: 0;
+}
+
+/* ── Selection Color ─────────────────────────────────────── */
+::selection {
+  background-color: var(--color-primary-container);
+  color: var(--color-on-primary);
+}
