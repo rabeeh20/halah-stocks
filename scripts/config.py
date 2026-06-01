@@ -6,10 +6,10 @@ Defines Shariah compliance thresholds and haram sector classifications.
 # ─── AAOIFI Shariah Compliance Thresholds ───────────────────────────────────────
 # All ratios use Market Cap as the denominator (AAOIFI standard)
 
-DEBT_RATIO_THRESHOLD = 30.0       # Interest-bearing Debt / Market Cap < 30%
+DEBT_RATIO_THRESHOLD = 5.0       # Interest-bearing Debt / Market Cap < 30%
 CASH_RATIO_THRESHOLD = 30.0       # Cash + Interest-bearing Securities / Market Cap < 30%
 RECEIVABLES_RATIO_THRESHOLD = 49.0  # Accounts Receivable / Market Cap < 49%
-INTEREST_INCOME_THRESHOLD = 5.0   # Interest Income / Total Revenue < 5%
+INTEREST_INCOME_THRESHOLD = 1.0   # Interest Income / Total Revenue < 5%
 
 # ─── Compliance Score Tiers ─────────────────────────────────────────────────────
 # Based on the maximum ratio value across all 4 financial screens
