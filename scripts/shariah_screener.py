@@ -227,6 +227,45 @@ class ShariahScreener:
             ]},
         }
 
+    def _get_symbols_from_local_data(self) -> list[str]:
+        """
+        Fallback: Get Nifty 500 symbols from local data files
+        when NSE API is unavailable.
+        """
+        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
+
+        # Try market_snapshot.json first (has all 500 symbols)
+        snapshot_file = os.path.join(data_dir, "market_snapshot.json")
+        if os.path.exists(snapshot_file):
+            try:
+                with open(snapshot_file, "r") as f:
+                    snap = json.load(f)
+                symbols = [s["symbol"] for s in snap.get("stocks", []) if s.get("symbol")]
+                if symbols:
+                    logger.info(f"Loaded {len(symbols)} symbols from market_snapshot.json")
+                    return symbols
+            except Exception as e:
+                logger.warning(f"Failed to read market_snapshot.json: {e}")
+
+        # Try screening_results.json (has all previously screened symbols)
+        results_file = os.path.join(data_dir, "screening_results.json")
+        if os.path.exists(results_file):
+            try:
+                with open(results_file, "r") as f:
+                    results = json.load(f)
+                symbols = []
+                for category in ["halal", "haram", "doubtful"]:
+                    for stock in results.get(category, []):
+                        if stock.get("symbol"):
+                            symbols.append(stock["symbol"])
+                if symbols:
+                    logger.info(f"Loaded {len(symbols)} symbols from screening_results.json")
+                    return symbols
+            except Exception as e:
+                logger.warning(f"Failed to read screening_results.json: {e}")
+
+        return []
+
     def run_full_screening(self, symbols: Optional[list[str]] = None) -> dict:
         """
         Run full Shariah screening on all Nifty 500 stocks (or a given list).
@@ -241,10 +280,16 @@ class ShariahScreener:
         if symbols is None:
             logger.info("Fetching Nifty 500 stock list from NSE...")
             symbols = self.nse_client.get_nifty500_symbols()
+
+            # Fallback: If NSE API fails, use symbols from existing data files
             if not symbols:
-                logger.error("Failed to fetch Nifty 500 symbols from NSE")
+                logger.warning("NSE API failed — trying fallback from local data files...")
+                symbols = self._get_symbols_from_local_data()
+
+            if not symbols:
+                logger.error("Failed to fetch Nifty 500 symbols from all sources")
                 return {"error": "Failed to fetch stock universe"}
-            logger.info(f"Got {len(symbols)} stocks from Nifty 500")
+            logger.info(f"Got {len(symbols)} stocks to screen")
 
         # Step 1: Fetch financial data from Screener.in
         logger.info(f"Fetching financial data for {len(symbols)} stocks from Screener.in...")
