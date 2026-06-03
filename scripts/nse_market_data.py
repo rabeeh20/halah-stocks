@@ -162,69 +162,90 @@ class NSEClient:
 
     def _fetch_via_yahoo(self, symbols: list[str]) -> list[dict]:
         """
-        Fetch prices from Yahoo Finance for a list of symbols.
+        Fetch prices from Yahoo Finance using yfinance library.
         Yahoo uses {SYMBOL}.NS format for NSE stocks.
-        Batches 50 symbols per request.
         """
         if not symbols:
             return []
 
-        logger.info(f"Fetching {len(symbols)} stocks via Yahoo Finance...")
-        stocks = []
-        batch_size = 50
+        try:
+            import yfinance as yf
+        except ImportError:
+            logger.error("yfinance not installed. Run: pip3 install yfinance")
+            return []
 
-        for i in range(0, len(symbols), batch_size):
-            batch = symbols[i:i + batch_size]
-            yahoo_symbols = " ".join(f"{s}.NS" for s in batch)
+        logger.info(f"Fetching {len(symbols)} stocks via Yahoo Finance (yfinance)...")
+
+        # Convert to Yahoo format: RELIANCE → RELIANCE.NS
+        yahoo_symbols = [f"{s}.NS" for s in symbols]
+        stocks = []
+
+        # Download in batches to avoid timeouts
+        batch_size = 100
+        for i in range(0, len(yahoo_symbols), batch_size):
+            batch = yahoo_symbols[i:i + batch_size]
+            batch_num = i // batch_size + 1
+            total_batches = (len(yahoo_symbols) + batch_size - 1) // batch_size
 
             try:
-                url = "https://query1.finance.yahoo.com/v7/finance/quote"
-                params = {
-                    "symbols": yahoo_symbols,
-                    "fields": "symbol,regularMarketPrice,regularMarketOpen,regularMarketDayHigh,regularMarketDayLow,regularMarketPreviousClose,regularMarketChange,regularMarketChangePercent,regularMarketVolume,fiftyTwoWeekHigh,fiftyTwoWeekLow,regularMarketTime",
-                }
-                headers = {
-                    "User-Agent": "Mozilla/5.0",
-                    "Accept": "application/json",
-                }
-                r = requests.get(url, params=params, headers=headers, timeout=15)
+                logger.info(f"  Batch {batch_num}/{total_batches}: {len(batch)} stocks...")
+                tickers = yf.Tickers(" ".join(batch))
+                # Use fast_info for batch speed
+                data = yf.download(
+                    " ".join(batch),
+                    period="1d",
+                    interval="1d",
+                    progress=False,
+                    group_by="ticker",
+                    auto_adjust=True,
+                    threads=True,
+                )
 
-                if r.status_code != 200:
-                    logger.warning(f"Yahoo batch {i // batch_size + 1}: HTTP {r.status_code}")
-                    continue
+                for yahoo_sym in batch:
+                    symbol = yahoo_sym.replace(".NS", "")
+                    try:
+                        if len(batch) == 1:
+                            row = data.iloc[-1] if not data.empty else None
+                        else:
+                            ticker_data = data[yahoo_sym] if yahoo_sym in data.columns.get_level_values(0) else None
+                            row = ticker_data.iloc[-1] if ticker_data is not None and not ticker_data.empty else None
 
-                data = r.json()
-                results = data.get("quoteResponse", {}).get("result", [])
+                        if row is not None:
+                            close = float(row.get("Close", 0) or 0)
+                            open_ = float(row.get("Open", 0) or 0)
+                            high = float(row.get("High", 0) or 0)
+                            low = float(row.get("Low", 0) or 0)
+                            vol = int(row.get("Volume", 0) or 0)
 
-                for item in results:
-                    symbol = item.get("symbol", "").replace(".NS", "")
-                    stocks.append({
-                        "symbol": symbol,
-                        "company_name": item.get("longName") or item.get("shortName", ""),
-                        "industry": item.get("industry", ""),
-                        "open": item.get("regularMarketOpen", 0),
-                        "high": item.get("regularMarketDayHigh", 0),
-                        "low": item.get("regularMarketDayLow", 0),
-                        "prev_close": item.get("regularMarketPreviousClose", 0),
-                        "ltp": item.get("regularMarketPrice", 0),
-                        "change": item.get("regularMarketChange", 0),
-                        "change_pct": item.get("regularMarketChangePercent", 0),
-                        "volume": item.get("regularMarketVolume", 0),
-                        "value_lakhs": 0,
-                        "year_high": item.get("fiftyTwoWeekHigh", 0),
-                        "year_low": item.get("fiftyTwoWeekLow", 0),
-                        "last_update_time": "",
-                    })
+                            stocks.append({
+                                "symbol": symbol,
+                                "company_name": "",
+                                "industry": "",
+                                "open": open_,
+                                "high": high,
+                                "low": low,
+                                "prev_close": open_,  # approximate
+                                "ltp": close,
+                                "change": close - open_,
+                                "change_pct": round(((close - open_) / open_) * 100, 2) if open_ else 0,
+                                "volume": vol,
+                                "value_lakhs": 0,
+                                "year_high": 0,
+                                "year_low": 0,
+                                "last_update_time": "",
+                            })
+                    except Exception:
+                        pass
 
-                logger.info(f"  Batch {i // batch_size + 1}: got {len(results)} quotes")
-                time.sleep(0.5)
+                time.sleep(0.3)
 
             except Exception as e:
-                logger.warning(f"Yahoo batch failed: {e}")
+                logger.warning(f"Batch {batch_num} failed: {e}")
                 time.sleep(1)
 
         logger.info(f"Yahoo Finance: total {len(stocks)} stocks fetched")
         return stocks
+
 
     # ── Parse NSE API response item ──────────────────────────────────────────
 
