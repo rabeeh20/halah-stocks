@@ -102,17 +102,13 @@ echo "🕐 Step 9: Setting up cron jobs..."
 mkdir -p "${APP_DIR}/logs"
 chown ubuntu:ubuntu "${APP_DIR}/logs"
 
-# Set server timezone to IST so cron times match Indian market
-timedatectl set-timezone Asia/Kolkata 2>/dev/null || true
-echo "  Timezone: $(date +%Z)"
-
 # Install cron jobs for ubuntu user
 PYTHON_PATH=$(which python3)
-CRON_CONTENT="# ── HalalVest: Daily Market Data Update (3:36 PM IST, Mon-Fri) ──
-36 15 * * 1-5 cd ${APP_DIR}/scripts && ${PYTHON_PATH} daily_market_update.py >> ${APP_DIR}/logs/daily_market.log 2>&1
+CRON_CONTENT="# ── HalalVest: Daily Market Data Update (3:45 PM IST, Mon-Fri) ──
+45 15 * * 1-5 cd ${APP_DIR}/scripts && ${PYTHON_PATH} daily_market_update.py >> ${APP_DIR}/logs/daily_market.log 2>&1
 
-# ── HalalVest: Monthly Shariah Screening (1st of month, 12 AM IST) ──
-0 0 1 * * cd ${APP_DIR}/scripts && ${PYTHON_PATH} shariah_screener.py >> ${APP_DIR}/logs/monthly_screening.log 2>&1
+# ── HalalVest: Monthly Shariah Screening (1st of month, 6 AM IST) ──
+0 6 1 * * cd ${APP_DIR}/scripts && ${PYTHON_PATH} shariah_screener.py >> ${APP_DIR}/logs/monthly_screening.log 2>&1
 
 # ── HalalVest: Log rotation (weekly) ──
 0 0 * * 0 find ${APP_DIR}/logs -name '*.log' -size +10M -exec truncate -s 0 {} \;
@@ -145,8 +141,8 @@ echo "  🌐 Website: http://3.7.157.216"
 echo "  📊 API:     http://3.7.157.216/api/stocks"
 echo ""
 echo "  📅 Cron Jobs:"
-echo "     Daily 3:36 PM IST (Mon-Fri)  → Market data update"
-echo "     Monthly 1st 12:00 AM IST     → Shariah screening"
+echo "     Daily 3:45 PM IST  → Market data update"
+echo "     Monthly 1st 6 AM   → Shariah screening"
 echo ""
 echo "  🛠️  Management Commands:"
 echo "     sudo systemctl status halalvest"

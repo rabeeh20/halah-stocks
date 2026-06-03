@@ -78,8 +78,10 @@ REVIEW_INDUSTRIES = [
 # ─── NSE API Configuration ──────────────────────────────────────────────────────
 
 NSE_BASE_URL = "https://www.nseindia.com"
+# Note: NSE deprecated /api/equity-stockIndices — nse_market_data.py handles fallbacks
 NSE_INDEX_URL = f"{NSE_BASE_URL}/api/equity-stockIndices"
 NSE_NIFTY500_INDEX = "NIFTY 500"
+NSE_CSV_URL = "https://nsearchives.nseindia.com/content/indices/ind_nifty500list.csv"
 
 NSE_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
