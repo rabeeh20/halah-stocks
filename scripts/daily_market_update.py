@@ -2,19 +2,20 @@
 """
 Daily Market Data Update Pipeline
 ==================================
-Runs every day at 3:45 PM IST (after NSE market close at 3:30 PM).
+Runs every day at 3:36 PM IST (after NSE market close at 3:30 PM).
 
-This script:
-  1. Fetches end-of-day (EOD) data for all Nifty 500 stocks from NSE
-  2. Merges live market data into existing halal_stocks.json (preserving screening results)
-  3. Saves a full market snapshot (market_snapshot.json) for all 500 stocks
-  4. Updates the screening_results.json with latest market data
+FLOW:
+  Monthly (1st of month) → shariah_screener.py → screens 500 stocks → saves HALAL list
+  Daily   (3:36 PM IST)  → THIS SCRIPT → fetches prices for HALAL stocks ONLY
 
-This is LIGHTWEIGHT — no Screener.in calls, no financial scraping.
-Only NSE API for prices, volume, and market cap.
+This is VERY LIGHTWEIGHT:
+  - Reads halal symbols from halal_stocks.json (e.g. 54 stocks)
+  - Fetches prices ONLY for those 54 halal stocks from Yahoo Finance
+  - Updates LTP, change%, volume in halal_stocks.json
+  - NO full 500-stock scan — that is the monthly screener's job
 
-Schedule: 45 15 * * 1-5 (3:45 PM IST, Monday–Friday)
-Duration: ~10 seconds
+Schedule: 6 10 * * 1-5 (3:36 PM IST = 10:06 AM UTC, Monday–Friday)
+Duration: ~5 seconds
 """
 
 import json
@@ -25,7 +26,6 @@ from datetime import datetime, timezone, timedelta
 
 # Add scripts directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from nse_market_data import NSEClient
 
 # ── Configuration ───────────────────────────────────────────────────────────────
 
@@ -65,20 +65,102 @@ def save_json(filepath: str, data: dict):
     logger.info(f"Saved: {filepath}")
 
 
-def fetch_nse_eod_data() -> list[dict]:
+def get_halal_symbols() -> list[str]:
     """
-    Fetch end-of-day market data for all Nifty 500 stocks.
-    Returns list of stock dicts with OHLCV + market data.
+    Read the list of HALAL stock symbols from halal_stocks.json.
+    These are the stocks screened monthly by shariah_screener.py.
+    We only fetch daily data for THESE stocks — not all 500.
     """
-    client = NSEClient()
-    stocks = client.get_nifty500_stocks()
-
-    if not stocks:
-        logger.error("Failed to fetch Nifty 500 data from NSE")
+    halal_data = load_json(HALAL_STOCKS_FILE)
+    if not halal_data:
+        logger.error("halal_stocks.json not found — run monthly screening first!")
         return []
 
-    logger.info(f"Fetched EOD data for {len(stocks)} stocks from NSE")
-    return stocks
+    symbols = [s["symbol"] for s in halal_data.get("stocks", []) if s.get("symbol")]
+    logger.info(f"Found {len(symbols)} halal stocks to update: {', '.join(symbols[:5])}...")
+    return symbols
+
+
+def fetch_halal_stocks_data(symbols: list[str]) -> list[dict]:
+    """
+    Fetch EOD market data for ONLY the halal stocks.
+    Uses Yahoo Finance (yfinance) — fast, reliable for Indian stocks.
+    """
+    if not symbols:
+        logger.error("No halal symbols to fetch")
+        return []
+
+    try:
+        import yfinance as yf
+    except ImportError:
+        logger.error("yfinance not installed. Run: pip3 install yfinance")
+        return []
+
+    logger.info(f"Fetching prices for {len(symbols)} halal stocks via Yahoo Finance...")
+
+    # Convert to Yahoo Finance format: RELIANCE → RELIANCE.NS
+    yahoo_symbols = [f"{s}.NS" for s in symbols]
+
+    try:
+        # Download all halal stocks in ONE batch (only 54 stocks — very fast)
+        data = yf.download(
+            " ".join(yahoo_symbols),
+            period="1d",
+            interval="1d",
+            progress=False,
+            group_by="ticker",
+            auto_adjust=True,
+            threads=True,
+        )
+
+        stocks = []
+        for yahoo_sym in yahoo_symbols:
+            symbol = yahoo_sym.replace(".NS", "")
+            try:
+                if len(yahoo_symbols) == 1:
+                    row = data.iloc[-1] if not data.empty else None
+                else:
+                    ticker_data = data[yahoo_sym] if yahoo_sym in data.columns.get_level_values(0) else None
+                    row = ticker_data.iloc[-1] if ticker_data is not None and not ticker_data.empty else None
+
+                if row is not None:
+                    close  = float(row.get("Close", 0) or 0)
+                    open_  = float(row.get("Open",  0) or 0)
+                    high   = float(row.get("High",  0) or 0)
+                    low    = float(row.get("Low",   0) or 0)
+                    vol    = int(row.get("Volume",  0) or 0)
+                    prev_close = open_  # best approximation from daily data
+                    change = round(close - open_, 2)
+                    change_pct = round(((close - open_) / open_) * 100, 2) if open_ else 0
+
+                    stocks.append({
+                        "symbol":          symbol,
+                        "open":            open_,
+                        "high":            high,
+                        "low":             low,
+                        "prev_close":      prev_close,
+                        "ltp":             close,
+                        "change":          change,
+                        "change_pct":      change_pct,
+                        "volume":          vol,
+                        "value_lakhs":     0,
+                        "year_high":       0,
+                        "year_low":        0,
+                        "last_update_time": "",
+                    })
+                    logger.info(f"  {symbol:<15} LTP=₹{close:.2f}  Change={change_pct:+.2f}%  Vol={vol:,}")
+                else:
+                    logger.warning(f"  {symbol}: No data returned")
+
+            except Exception as e:
+                logger.warning(f"  {symbol}: Error — {e}")
+
+        logger.info(f"✅ Fetched {len(stocks)}/{len(symbols)} halal stocks successfully")
+        return stocks
+
+    except Exception as e:
+        logger.error(f"Yahoo Finance batch download failed: {e}")
+        return []
 
 
 def update_halal_stocks(nse_data: list[dict]) -> dict:
@@ -219,6 +301,7 @@ def create_market_snapshot(nse_data: list[dict]) -> dict:
 def run_daily_update():
     """
     Main entry point for the daily market data update.
+    ONLY updates prices for HALAL stocks — not all 500.
     """
     now = datetime.now(IST)
     logger.info("=" * 60)
@@ -228,45 +311,44 @@ def run_daily_update():
     # Check if it's a weekday (market is closed on weekends)
     force = "--force" in sys.argv
     if now.weekday() >= 5 and not force:  # 5=Saturday, 6=Sunday
-        logger.info("Weekend detected — skipping market update (use --force to override)")
+        logger.info("Weekend — skipping (use --force to override)")
         return
 
-    # ── Step 1: Fetch NSE EOD data ──────────────────────────────────────────
-    logger.info("\n📊 Step 1: Fetching NSE end-of-day data...")
-    nse_data = fetch_nse_eod_data()
+    # ── Step 1: Read halal symbols from monthly screening ───────────────────
+    logger.info("\n📋 Step 1: Reading halal stock list from last monthly screening...")
+    halal_symbols = get_halal_symbols()
 
-    if not nse_data:
-        logger.error("❌ NSE data fetch failed — aborting daily update")
+    if not halal_symbols:
+        logger.error("❌ No halal stocks found — run monthly screening first!")
         sys.exit(1)
 
-    # ── Step 2: Update halal_stocks.json ────────────────────────────────────
-    logger.info("\n🕌 Step 2: Updating halal stocks with fresh market data...")
-    halal_data = update_halal_stocks(nse_data)
+    # ── Step 2: Fetch prices for ONLY those halal stocks ────────────────────
+    logger.info(f"\n📊 Step 2: Fetching prices for {len(halal_symbols)} halal stocks...")
+    market_data = fetch_halal_stocks_data(halal_symbols)
+
+    if not market_data:
+        logger.error("❌ Market data fetch failed — aborting")
+        sys.exit(1)
+
+    # ── Step 3: Merge into halal_stocks.json (preserve screening data) ──────
+    logger.info("\n🕌 Step 3: Merging market data into halal_stocks.json...")
+    halal_data = update_halal_stocks(market_data)
     if halal_data:
         save_json(HALAL_STOCKS_FILE, halal_data)
-
-    # ── Step 3: Update screening_results.json ───────────────────────────────
-    logger.info("\n📋 Step 3: Updating screening results...")
-    results_data = update_screening_results(nse_data)
-    if results_data:
-        save_json(SCREENING_RESULTS_FILE, results_data)
-
-    # ── Step 4: Save full market snapshot ───────────────────────────────────
-    logger.info("\n📸 Step 4: Creating market snapshot...")
-    snapshot = create_market_snapshot(nse_data)
-    save_json(MARKET_SNAPSHOT_FILE, snapshot)
 
     # ── Summary ─────────────────────────────────────────────────────────────
     logger.info("\n" + "=" * 60)
     logger.info("  ✅ DAILY UPDATE COMPLETE")
-    logger.info(f"  Nifty 500 stocks: {len(nse_data)}")
-    if halal_data:
-        logger.info(f"  Halal stocks updated: {len(halal_data.get('stocks', []))}")
-    if snapshot.get("summary"):
-        s = snapshot["summary"]
-        logger.info(f"  Market: {s['advances']} ↑  {s['declines']} ↓  {s['unchanged']} =")
-        logger.info(f"  Top Gainer: {s['top_gainer']['symbol']} (+{s['top_gainer']['change_pct']:.2f}%)")
-        logger.info(f"  Top Loser:  {s['top_loser']['symbol']} ({s['top_loser']['change_pct']:.2f}%)")
+    logger.info(f"  Halal stocks updated: {len(market_data)}/{len(halal_symbols)}")
+    if market_data:
+        gainers = [s for s in market_data if (s.get('change_pct') or 0) > 0]
+        losers  = [s for s in market_data if (s.get('change_pct') or 0) < 0]
+        if gainers:
+            top = max(gainers, key=lambda s: s.get('change_pct', 0))
+            logger.info(f"  Top Gainer: {top['symbol']} (+{top['change_pct']:.2f}%)")
+        if losers:
+            bot = min(losers, key=lambda s: s.get('change_pct', 0))
+            logger.info(f"  Top Loser:  {bot['symbol']} ({bot['change_pct']:.2f}%)")
     logger.info("=" * 60)
 
 
