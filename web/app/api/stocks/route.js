@@ -61,6 +61,10 @@ function getFileModTime(filename) {
   }
 }
 
+// Force this route to be dynamic — never statically cached by Next.js
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 // ── API Handler ─────────────────────────────────────────────────────────────
 
 export async function GET() {
@@ -68,9 +72,14 @@ export async function GET() {
     // Check if the data file has been updated since last cache
     const halalModTime = getFileModTime("halal_stocks.json");
 
-    // Serve from cache if file hasn't changed
+    // Serve from in-memory cache if file hasn't changed (avoids disk reads)
     if (cache.data && cache.fileModified === halalModTime) {
-      return NextResponse.json(cache.data);
+      return NextResponse.json(cache.data, {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          "Pragma": "no-cache",
+        },
+      });
     }
 
     // ── Read halal stocks (screening + daily market data merged) ────────
@@ -131,10 +140,15 @@ export async function GET() {
       snapshot_summary: snapshotData?.summary || null,
     };
 
-    // Update cache
+    // Update in-memory cache keyed by file mod time
     cache = { data: result, fileModified: halalModTime };
 
-    return NextResponse.json(result);
+    return NextResponse.json(result, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Pragma": "no-cache",
+      },
+    });
   } catch (err) {
     console.error("API error:", err);
     return NextResponse.json(
