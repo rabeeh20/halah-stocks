@@ -62,13 +62,16 @@ export default function ScreenerPage() {
         const data = await res.json();
 
         setDataSource(data.source || "UNKNOWN");
-        setLastUpdated(data.last_updated || "");
+        setLastUpdated(data.last_market_update || data.last_updated || "");
         setWarning(data.warning || "");
         setTotalHalal(data.total_halal || 0);
 
-        // Use halal_stocks or all_stocks based on view
-        const allStocks = data.all_stocks || data.halal_stocks || [];
-        setStocks(allStocks);
+        // IMPORTANT: Store both datasets separately.
+        // halal_stocks → updated DAILY with fresh prices (use for Halal view)
+        // all_stocks   → from market snapshot (use for All Nifty 500 view only)
+        const halal = data.halal_stocks || [];
+        const all   = data.all_stocks || halal;
+        setStocks({ halal, all });
       } catch (err) {
         console.error("Fetch error:", err);
         setError(err.message);
@@ -79,19 +82,19 @@ export default function ScreenerPage() {
 
     fetchData();
 
-    // Auto-refresh every 60 seconds during market hours
-    const interval = setInterval(fetchData, 60 * 1000);
+    // Auto-refresh every 5 minutes (no need every 60s — data updates once at 3:36 PM)
+    const interval = setInterval(fetchData, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Filter and sort
+  // Filter and sort — use correct dataset based on view mode
   const filtered = useMemo(() => {
-    let data = [...stocks];
+    // Key fix: halal view uses halal_stocks (fresh daily), all view uses all_stocks (snapshot)
+    const dataset = viewMode === "halal"
+      ? (stocks.halal || [])
+      : (stocks.all   || stocks.halal || []);
 
-    // View mode filter
-    if (viewMode === "halal") {
-      data = data.filter((s) => s.status === "HALAL");
-    }
+    let data = [...dataset];
 
     // Search filter
     if (search) {

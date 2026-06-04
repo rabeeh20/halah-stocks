@@ -102,10 +102,11 @@ def fetch_halal_stocks_data(symbols: list[str]) -> list[dict]:
     yahoo_symbols = [f"{s}.NS" for s in symbols]
 
     try:
-        # Download all halal stocks in ONE batch (only 54 stocks — very fast)
+        # Download 2 days so we have yesterday's close as prev_close
+        # This gives the SAME change% as NSE shows (close vs prev_close)
         data = yf.download(
             " ".join(yahoo_symbols),
-            period="1d",
+            period="2d",
             interval="1d",
             progress=False,
             group_by="ticker",
@@ -118,45 +119,54 @@ def fetch_halal_stocks_data(symbols: list[str]) -> list[dict]:
             symbol = yahoo_sym.replace(".NS", "")
             try:
                 if len(yahoo_symbols) == 1:
-                    row = data.iloc[-1] if not data.empty else None
+                    ticker_data = data
                 else:
                     ticker_data = data[yahoo_sym] if yahoo_sym in data.columns.get_level_values(0) else None
-                    row = ticker_data.iloc[-1] if ticker_data is not None and not ticker_data.empty else None
 
-                if row is not None:
-                    close  = float(row.get("Close", 0) or 0)
-                    open_  = float(row.get("Open",  0) or 0)
-                    high   = float(row.get("High",  0) or 0)
-                    low    = float(row.get("Low",   0) or 0)
-                    vol    = int(row.get("Volume",  0) or 0)
-                    prev_close = open_  # best approximation from daily data
-                    change = round(close - open_, 2)
-                    change_pct = round(((close - open_) / open_) * 100, 2) if open_ else 0
-
-                    stocks.append({
-                        "symbol":          symbol,
-                        "open":            open_,
-                        "high":            high,
-                        "low":             low,
-                        "prev_close":      prev_close,
-                        "ltp":             close,
-                        "change":          change,
-                        "change_pct":      change_pct,
-                        "volume":          vol,
-                        "value_lakhs":     0,
-                        "year_high":       0,
-                        "year_low":        0,
-                        "last_update_time": "",
-                    })
-                    logger.info(f"  {symbol:<15} LTP=₹{close:.2f}  Change={change_pct:+.2f}%  Vol={vol:,}")
-                else:
+                if ticker_data is None or ticker_data.empty:
                     logger.warning(f"  {symbol}: No data returned")
+                    continue
+
+                # Today's row (last row), yesterday's row (second to last)
+                today = ticker_data.iloc[-1]
+                yesterday = ticker_data.iloc[-2] if len(ticker_data) >= 2 else None
+
+                close      = float(today.get("Close", 0) or 0)
+                open_      = float(today.get("Open",  0) or 0)
+                high       = float(today.get("High",  0) or 0)
+                low        = float(today.get("Low",   0) or 0)
+                vol        = int(today.get("Volume",  0) or 0)
+
+                # prev_close = yesterday's closing price (CORRECT formula — matches NSE)
+                prev_close = float(yesterday.get("Close", 0) or 0) if yesterday is not None else open_
+
+                change     = round(close - prev_close, 2)
+                change_pct = round(((close - prev_close) / prev_close) * 100, 2) if prev_close else 0
+
+                stocks.append({
+                    "symbol":           symbol,
+                    "open":             open_,
+                    "high":             high,
+                    "low":              low,
+                    "prev_close":       prev_close,
+                    "ltp":              close,
+                    "change":           change,
+                    "change_pct":       change_pct,
+                    "volume":           vol,
+                    "value_lakhs":      0,
+                    "year_high":        0,
+                    "year_low":         0,
+                    "last_update_time": "",
+                })
+                sign = "+" if change_pct > 0 else ""
+                logger.info(f"  {symbol:<15} LTP=₹{close:.2f}  PrevClose=₹{prev_close:.2f}  Change={sign}{change_pct:.2f}%  Vol={vol:,}")
 
             except Exception as e:
                 logger.warning(f"  {symbol}: Error — {e}")
 
         logger.info(f"✅ Fetched {len(stocks)}/{len(symbols)} halal stocks successfully")
         return stocks
+
 
     except Exception as e:
         logger.error(f"Yahoo Finance batch download failed: {e}")
